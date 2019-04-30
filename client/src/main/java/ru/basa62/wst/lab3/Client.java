@@ -1,21 +1,25 @@
 package ru.basa62.wst.lab3;
 
+import ru.basa62.wst.lab3.ws.client.*;
 import ru.basa62.wst.lab3.ws.client.BooksEntity;
-import ru.basa62.wst.lab3.ws.client.BooksServiceException;
-import ru.basa62.wst.lab3.ws.client.BooksService_Service;
 
+import javax.xml.ws.BindingProvider;
+import javax.xml.ws.handler.MessageContext;
 import java.io.IOException;
 import java.net.URL;
-import java.util.Formatter;
-import java.util.List;
-import java.util.Scanner;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
+
+import static java.util.Collections.singletonList;
 
 public class Client {
-    static BooksService_Service booksService;
+    private static BooksService service;
+    private static String username = null;
+    private static String password = null;
 
     public static void main(String[] args) throws IOException {
         URL url = new URL(args[0]);
-        booksService = new BooksService_Service(url);
+        service = new BooksService_Service(url).getBooksServicePort();
 
         System.out.println("Добро пожаловать в библиотеку.");
         Scanner in = new Scanner(System.in);
@@ -26,7 +30,8 @@ public class Client {
                     "2 - filter\n" +
                     "3 - create\n" +
                     "4 - update\n" +
-                    "5 - delete\n");
+                    "5 - delete\n" +
+                    "6 - Make makeAuth");
             System.out.print("Выбор: ");
             choiceStr = checkEmpty(in.nextLine());
             if (choiceStr != null) {
@@ -49,6 +54,9 @@ public class Client {
                     case 5:
                         delete();
                         break;
+                    case 6:
+                        makeAuth();
+                        break;
                     default:
                         System.out.println("Неверное значение");
                         break;
@@ -60,10 +68,33 @@ public class Client {
 
     }
 
+    private static void makeAuth() {
+        Scanner in = new Scanner(System.in);
+        System.out.println("Enter user and password");
+        while (username == null || password == null) {
+            System.out.print("user: ");
+            username = checkEmpty(in.nextLine());
+            System.out.print("password: ");
+            password = checkEmpty(in.nextLine());
+        }
+    }
+
+    private static void preAuth() {
+        if (username == null || password == null){
+            makeAuth();
+        }
+        BindingProvider bp = (BindingProvider) service;
+        Map<String, Object> rc = bp.getRequestContext();
+        Map<String, List<String>> headers = new HashMap<>();
+        headers.put("Authorization", singletonList("Basic " + Base64.getEncoder()
+                .encodeToString((username + ":" + password).getBytes(StandardCharsets.UTF_8))));
+        rc.put(MessageContext.HTTP_REQUEST_HEADERS, headers);
+    }
+
     private static void findAll() {
         System.out.println("Выведем все книги:");
         try {
-            List<BooksEntity> books1 = booksService.getBooksServicePort().findAll();
+            List<BooksEntity> books1 = service.findAll();
             for (BooksEntity book : books1) {
                 System.out.println(printBook(book));
             }
@@ -94,7 +125,7 @@ public class Client {
         String isbn = checkEmpty(in.nextLine());
 
         try {
-            List<BooksEntity> books2 = booksService.getBooksServicePort().filter(id, name, author, publicDate, isbn);
+            List<BooksEntity> books2 = service.filter(id, name, author, publicDate, isbn);
 
             if (books2.size() == 0) {
                 System.out.println("Ничего не найдено");
@@ -110,6 +141,7 @@ public class Client {
     }
 
     private static void create() {
+        preAuth();
         Scanner in = new Scanner(System.in);
         System.out.println("Создадим книгу:");
 
@@ -126,14 +158,21 @@ public class Client {
         String isbn = checkEmpty(in.nextLine());
 
         try {
-            Long newId = booksService.getBooksServicePort().create(name, author, publicDate, isbn);
+            Long newId = service.create(name, author, publicDate, isbn);
             System.out.printf("Новый ID: %d", newId);
         } catch (BooksServiceException e) {
             System.out.println(e.getFaultInfo().getMessage());
+        } catch (UnuathorizedException e) {
+            System.out.println(e.getFaultInfo().getMessage());
+            makeAuth();
+        } catch (ForbiddenException e) {
+            System.out.println(e.getFaultInfo().getMessage());
+            makeAuth();
         }
     }
 
     private static void update() {
+        preAuth();
         Scanner in = new Scanner(System.in);
         System.out.println("Обновим книгу:");
         System.out.print("ID: ");
@@ -157,14 +196,21 @@ public class Client {
         String isbn = checkEmpty(in.nextLine());
 
         try {
-            int count = booksService.getBooksServicePort().update(id, name, author, publicDate, isbn);
+            int count = service.update(id, name, author, publicDate, isbn);
             System.out.printf("Обновлено: %d", count);
         } catch (BooksServiceException e) {
             System.out.println(e.getFaultInfo().getMessage());
+        } catch (UnuathorizedException e) {
+            System.out.println(e.getFaultInfo().getMessage());
+            makeAuth();
+        } catch (ForbiddenException e) {
+            System.out.println(e.getFaultInfo().getMessage());
+            makeAuth();
         }
     }
 
     private static void delete() {
+        preAuth();
         Scanner in = new Scanner(System.in);
         System.out.println("Удалим книгу:");
         System.out.print("ID: ");
@@ -172,10 +218,16 @@ public class Client {
         if (idStr != null) {
             long id = Long.parseLong(idStr);
             try {
-                int count = booksService.getBooksServicePort().delete(id);
+                int count = service.delete(id);
                 System.out.printf("Удалено: %d", count);
             } catch (BooksServiceException e) {
                 System.out.println(e.getFaultInfo().getMessage());
+            } catch (UnuathorizedException e) {
+                System.out.println(e.getFaultInfo().getMessage());
+                makeAuth();
+            } catch (ForbiddenException e) {
+                System.out.println(e.getFaultInfo().getMessage());
+                makeAuth();
             }
         } else {
             System.out.println("Ничего не введено");
